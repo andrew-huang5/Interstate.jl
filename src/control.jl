@@ -60,19 +60,33 @@ function controller(CMD::Channel,
                     SENSE_FLEET::Channel, 
                     EMG::Channel,
                     road)
+    
+    println("Autonomous controller in use.")
     ego_meas = fetch(SENSE)
     fleet_meas = fetch(SENSE_FLEET)
     K₁ = K₂ = 0.5
 
+    #change target velocity
+    #variable for target lane
+
     while true
-        sleep(0)
+        sleep(0.0)
         @return_if_told(EMG)
         
         ego_meas = @fetch_or_default(SENSE, ego_meas)
         fleet_meas = @fetch_or_default(SENSE_FLEET, fleet_meas)
         
-        command = [0.0, 0.0] # replace!
+        command = [0.0, 0.0]
+        seg = road.segments[1]
+        cte, ctv = get_crosstrack_error(ego_meas.position, ego_meas.heading, ego_meas.speed, ego_meas.target_lane, seg, road.lanes, road.lanewidth)
+        δ = -K₁*cte-K₂*ctv
+        command = [0.0 max(min(δ, π/4.0), -π/4.0)]
         @replace(CMD, command)
-
     end
+
 end
+
+
+# how to stay in one lane
+# what is in ego_meas?
+# using get_crosstrack_error
