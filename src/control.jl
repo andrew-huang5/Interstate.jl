@@ -75,6 +75,40 @@ function controller(CMD::Channel,
         
         ego_meas = @fetch_or_default(SENSE, ego_meas)
         fleet_meas = @fetch_or_default(SENSE_FLEET, fleet_meas)
+        target_velocity = 1
+        target_lane = 1
+        
+        # println(ego_meas)
+
+        # for meas in ego_meas
+        #     print(meas)
+        # end
+
+        # for m ∈ ego_meas
+        #     println(m.road_segment_id)
+        #     seg = road.segments[m.road_segment_id]
+        #     cte, ctv = get_crosstrack_error(m.position, m.heading, m.speed, m.target_lane, seg, road.lanes, road.lanewidth)
+        #     δ = -K₁*cte-K₂*ctv
+        #     command = [0.0 max(min(δ, π/4.0), -π/4.0)]
+        #     # @replace(CMD[id], command)
+        # end
+
+        # println(ego_meas.road_segment_id) # returns -1
+
+        front = ego_meas.position[2] + ego_meas.front
+        # for (id, m) ∈ fleet_meas
+        #     closest_position = INT_MAX
+        #     distance = m.position[1] + m.rear - front
+        #     if (m.target_lane == target_lane && distance > front)
+        #         closest_position = 
+
+
+        #     # seg = road.segments[m.road_segment_id]
+        #     # cte, ctv = get_crosstrack_error(m.position, m.heading, m.speed, m.target_lane, seg, road.lanes, road.lanewidth)
+        #     # δ = -K₁*cte-K₂*ctv
+        #     # command = [0.0 max(min(δ, π/4.0), -π/4.0)]
+        #     # @replace(CMD[id], command)
+        # end
         
         command = [0.0, 0.0]
         seg = road.segments[1]
@@ -82,6 +116,7 @@ function controller(CMD::Channel,
         δ = -K₁*cte-K₂*ctv
         command = [0.0 max(min(δ, π/4.0), -π/4.0)]
         @replace(CMD, command)
+        
     end
 
 end
