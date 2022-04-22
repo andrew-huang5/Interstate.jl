@@ -68,7 +68,7 @@ function controller(CMD::Channel,
 
     #change target velocity
     #variable for target lane
-    target_velocity = 1
+    target_velocity = 30
     target_lane = 2
 
     while true
@@ -77,77 +77,63 @@ function controller(CMD::Channel,
         
         ego_meas = @fetch_or_default(SENSE, ego_meas)
         fleet_meas = @fetch_or_default(SENSE_FLEET, fleet_meas)
-        
-        # println(ego_meas)
 
-        # for meas in ego_meas
-        #     print(meas)
-        # end
+        smallest_angle_1 = 2π
+        smallest_angle_2 = 2π       
+        smallest_angle_3 = 2π
 
-        # for m ∈ ego_meas
-        #     println(m.road_segment_id)
-        #     seg = road.segments[m.road_segment_id]
-        #     cte, ctv = get_crosstrack_error(m.position, m.heading, m.speed, m.target_lane, seg, road.lanes, road.lanewidth)
-        #     δ = -K₁*cte-K₂*ctv
-        #     command = [0.0 max(min(δ, π/4.0), -π/4.0)]
-        #     # @replace(CMD[id], command)
-        # end
-
-        # println(ego_meas.road_segment_id) # returns -1
-
-        # ego_car_front = ego_meas.position[2] + ego_meas.front
-        # closest_position = 10000000000000
-        # print(fleet_meas)
-        # for (id, m) ∈ fleet_meas
-        #     front_car_rear = m.position[2] + m.rear
-        #     if (m.target_lane == target_lane && front_car_rear > ego_car_front && closest_position >= front_car_rear)
-        #         closest_position = front_car_rear
-        #         if(front_car_rear - ego_car_front <= .5)
-        #             target_velocity = 0
-        #         else
-        #             target_velocity = m.target_vel
-        #         end
-        #     end
-
-        #     # seg = road.segments[m.road_segment_id]
-        #     # cte, ctv = get_crosstrack_error(m.position, m.heading, m.speed, m.target_lane, seg, road.lanes, road.lanewidth)
-        #     # δ = -K₁*cte-K₂*ctv
-        #     # command = [0.0 max(min(δ, π/4.0), -π/4.0)]
-        #     # @replace(CMD[id], command)
-        # end
-
-        smallest_angle = 2π
-        local closest_car
+        largest_angle = -2π
+        local closest_car_front_1
+        local closest_car_front_2
+        local closest_car_front_3
+        local closest_car_behind
+        local target_car
 
 
         for (id, m) ∈ fleet_meas
-            if(m.target_lane == target_lane)
-                center_position = road.segments[1].center
-                ego_distance = ego_meas.position - center_position
-                car_distance = m.position - center_position
+            center_position = road.segments[1].center
+            ego_distance = ego_meas.position - center_position
+            car_distance = m.position - center_position
 
-                ego_angle = atan(ego_distance[2], ego_distance[1])
-                car_angle = atan(car_distance[2], car_distance[1])
+            ego_angle = atan(ego_distance[2], ego_distance[1])
+            car_angle = atan(car_distance[2], car_distance[1])
 
-                difference = car_angle - ego_angle
+            difference = car_angle - ego_angle
 
-                if(difference > 0 && difference < smallest_angle)
-                    smallest_angle = difference
-                    closest_car = m
-                end
+            if(difference > 0 && difference < smallest_angle_1 && m.target_lane == 1)
+                smallest_angle_1 = difference
+                closest_car_front_1 = m
+            end
+
+            if(difference > 0 && difference < smallest_angle_2 && m.target_lane == 2)
+                smallest_angle_2 = difference
+                closest_car_front_2 = m
+            end
+
+            if(difference > 0 && difference < smallest_angle_3 && m.target_lane == 3)
+                smallest_angle_3 = difference
+                closest_car_front_3 = m
+            end
+
+            if(difference < 0 && difference > largest_angle)
+                largest_angle = difference
+                closest_car_behind = m
             end
         end
-        target_velocity = closest_car.speed
+
+        target_car = get_target_car(ego_meas, closest_car_front_1, closest_car_front_2, closest_car_front_3)
+        
+        target_velocity = target_car.speed
         # print(ego_meas.speed, ' ' , target_velocity,' ', '\n')
         
-        command = [1, 0.0]
         seg = road.segments[1]
-        cte, ctv = get_crosstrack_error(ego_meas.position, ego_meas.heading, ego_meas.speed, ego_meas.target_lane, seg, road.lanes, road.lanewidth)
+        cte, ctv = get_crosstrack_error(ego_meas.position, ego_meas.heading, ego_meas.speed, target_car.target_lane, seg, road.lanes, road.lanewidth)
         δ = -K₁*cte-K₂*ctv
-        if(norm(ego_meas.position - closest_car.position) < 30)
-            print(norm(ego_meas.position - closest_car.position))
+        if(norm(ego_meas.position - target_car.position) < 30)
+            print(norm(ego_meas.position - target_car.position))
             command = [(target_velocity - ego_meas.speed), max(min(δ, π/4.0), -π/4.0)]
         else
+            # can use 1 for the change in velocity if you want car to speed up
             command = [0 max(min(δ, π/4.0), -π/4.0)]  
         end
         # command = [0 max(min(δ, π/4.0), -π/4.0)]
@@ -161,3 +147,17 @@ end
 # how to stay in one lane
 # what is in ego_meas?
 # using get_crosstrack_error
+
+function get_target_car(ego, car1, car2, car3)
+    distance1 = norm(ego.position - car1.position)
+    distance2 = norm(ego.position - car2.position)
+    distance3 = norm(ego.position - car3.position)
+
+    if(distance1 >= distance2 && distance1 >= distance3)
+        return car1
+    elseif(distance2 >= distance1 && distance2 >= distance3)
+        return car2
+    else 
+        return car3
+    end
+end
