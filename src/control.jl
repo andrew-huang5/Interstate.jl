@@ -68,7 +68,6 @@ function controller(CMD::Channel,
 
     #change target velocity
     #variable for target lane
-    max_velocity = 60
     target_velocity = 30
     target_lane = 2
 
@@ -190,14 +189,6 @@ function controller(CMD::Channel,
 
         # println(target_lane)
 
-        # check if lane change is required
-        if (closest_car_behind.speed > ego_meas.speed && (norm(ego_meas.position - closest_car_behind.position) < 30))
-            target_car = get_target_car(ego_meas, closest_car_front_1, closest_car_front_2, closest_car_front_3)
-        else
-            target_car = follow_car(ego_meas, closest_car_front_1, closest_car_front_2, closest_car_front_3)
-        end
-
-        target_velocity = target_car.speed
         # print(ego_meas.speed, ' ' , target_velocity,' ', '\n')
         
         seg = road.segments[1]
@@ -216,7 +207,11 @@ function controller(CMD::Channel,
 
 end
 
-# determine which car to switch to
+
+# how to stay in one lane
+# what is in ego_meas?
+# using get_crosstrack_error
+
 function get_target_car(ego, car1, car2, car3)
     # if car1 != undef
     #     distance1 = norm(ego.position - car1.position)
@@ -258,48 +253,11 @@ function get_target_car(ego, car1, car2, car3)
     distance2 = norm(ego.position - car2.position)
     distance3 = norm(ego.position - car3.position)
 
-    if (ego.target_lane == car1.target_lane)
-        if (distance2 >= distance3)
-            return car2
-        elseif (distance3 > distance2)
-            return car3
-        else 
-            return car1
-        end
-    elseif (ego.target_lane == car2.target_lane)
-        if (distance1 >= distance3)
-            return car1
-        elseif (distance3 > distance1)
-            return car3
-        else 
-            return car2
-        end
-    else
-        if (distance1 >= distance2)
-            return car1
-        elseif (distance2 > distance1)
-            return car1
-        else 
-            return car3
-        end
-    end
-    #= if(distance1 >= distance2 && distance1 >= distance3 && ego.target_lane != car1.target_lane)
+    if(distance1 >= distance2 && distance1 >= distance3)
         return car1
-    elseif(distance2 >= distance1 && distance2 >= distance3 && ego.target_lane != car2.target_lane)
+    elseif(distance2 >= distance1 && distance2 >= distance3)
         return car2
     else 
         return car3
-    end =#
-end
-
-# follow car in lane
-function follow_car(ego, car1, car2, car3)
-    if (ego.target_lane == car1.target_lane)
-        return car1
-    elseif (ego.target_lane == car2.target_lane)
-        return car2
-    else
-        return car3
     end
 end
-
