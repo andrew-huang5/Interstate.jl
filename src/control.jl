@@ -72,7 +72,7 @@ function controller(CMD::Channel,
     target_lane = 2
     local target_car = undef
     local old_target = undef
-    local set_counter = 400
+    local set_counter = 250
     counter = set_counter
     change_lanes = true
 
@@ -157,6 +157,16 @@ function controller(CMD::Channel,
             target_car = closest_car_front_3
         end
 
+        # if target_lane == 1 && closest_car_behind_1 != target_car
+        #     target_car = closest_car_front_1
+        # end
+        # if target_lane == 2 && closest_car_behind_2 != target_car
+        #     target_car = closest_car_front_2
+        # end
+        # if target_lane == 3 && closest_car_behind_3 != target_car
+        #     target_car = closest_car_front_3
+        # end
+
         for (id, m) ∈ fleet_meas
             car_distance = m.position - center_position
             car_angle = atan(car_distance[2], car_distance[1])
@@ -166,9 +176,9 @@ function controller(CMD::Channel,
 
                 difference = wrap(car_angle - ego_angle)
 
-                length = ((m.target_lane * road.lanewidth) + road.segments[1].radius) * difference
+                length = ((m.target_lane * road.lanewidth) + road.segments[1].radius) * abs(difference)
 
-                if difference < .06 && difference > -.06 && length >= 2*ego_meas.front
+                if difference < .08 && difference > -.08 # && ego_meas.front < length
                     counter = 0
                     if m.target_lane == 1
                         change_lane_1 = false
@@ -185,7 +195,7 @@ function controller(CMD::Channel,
         car_distance = closest_car_behind_1.position - center_position
         car_angle = atan(car_distance[2], car_distance[1])
         difference = wrap(car_angle - ego_angle)
-        if difference > -.06 && closest_car_behind_1.speed > ego_meas.speed
+        if difference < 0 && closest_car_behind_1.speed - ego_meas.speed > 5
             change_lane_1 = false
             counter = 0
         end
@@ -194,7 +204,7 @@ function controller(CMD::Channel,
         car_distance = closest_car_behind_2.position - center_position
         car_angle = atan(car_distance[2], car_distance[1])
         difference = wrap(car_angle - ego_angle)
-        if difference > -.06 && closest_car_behind_2.speed > ego_meas.speed
+        if difference < 0 && closest_car_behind_2.speed - ego_meas.speed > 5
             change_lane_2 = false
             counter = 0
         end
@@ -203,7 +213,7 @@ function controller(CMD::Channel,
         car_distance = closest_car_behind_3.position - center_position
         car_angle = atan(car_distance[2], car_distance[1])
         difference = wrap(car_angle - ego_angle)
-        if difference > -.06 && closest_car_behind_3.speed > ego_meas.speed > 5
+        if difference < 0 && closest_car_behind_3.speed - ego_meas.speed > 5
             change_lane_3 = false
             counter = 0
         end
@@ -216,20 +226,20 @@ function controller(CMD::Channel,
         #check for car behind
         #if car is close behind and is moving faster than ego, trigger counter
         
-        if target_lane == 1 && norm(ego_meas.position - closest_car_behind_1.position) < 35 && ego_meas.speed < closest_car_behind_1.speed
+        if target_lane == 1 && norm(ego_meas.position - closest_car_behind_1.position) < 35 && ego_meas.speed < closest_car_behind_1.speed 
             counter = set_counter
-            println("INCOMING 1")
-            command = [1.5*(closest_car_behind_1.speed - ego_meas.speed) max(min(δ, π/4.0), -π/4.0)] 
+            # println("INCOMING 1")
+            command = [10*(closest_car_behind_1.speed - ego_meas.speed) max(min(δ, π/4.0), -π/4.0)] 
             @replace(CMD, command)
         elseif target_lane == 2 && norm(ego_meas.position - closest_car_behind_2.position) < 35 && ego_meas.speed < closest_car_behind_2.speed
             counter = set_counter
-            println("INCOMING 2")
-            command = [1.5*(closest_car_behind_2.speed - ego_meas.speed) max(min(δ, π/4.0), -π/4.0)] 
+            # println("INCOMING 2")
+            command = [10*(closest_car_behind_2.speed - ego_meas.speed) max(min(δ, π/4.0), -π/4.0)] 
             @replace(CMD, command)
         elseif target_lane == 3 && norm(ego_meas.position - closest_car_behind_3.position) < 35 && ego_meas.speed < closest_car_behind_3.speed
             counter = set_counter
-            println("INCOMING 3")
-            command = [1.5*(closest_car_behind_3.speed - ego_meas.speed) max(min(δ, π/4.0), -π/4.0)] 
+            # println("INCOMING 3")
+            command = [10*(closest_car_behind_3.speed - ego_meas.speed) max(min(δ, π/4.0), -π/4.0)] 
             @replace(CMD, command)
         end
 
@@ -307,16 +317,19 @@ function controller(CMD::Channel,
                     # println("SLOWING DOWN")
                     command = [1 * (target_car.speed - ego_meas.speed), max(min(δ, π/4.0), -π/4.0)]
                 else
-                    ego_meas.speed <= 30 ? command = [1 max(min(δ, π/4.0), -π/4.0)]  : command = [0 max(min(δ, π/4.0), -π/4.0)]  
+                    ego_meas.speed <= 30 ? command = [1 max(min(δ, π/4.0), -π/4.0)]  : command = [-10 max(min(δ, π/4.0), -π/4.0)]  
                 end
             elseif ego_meas.speed <= 20  
                 command = [5 max(min(δ, π/4.0), -π/4.0)] 
+                @replace(CMD, command)
+                @replace(CMD, command)
             elseif ego_meas.speed <= 25
                 command = [1.5 max(min(δ, π/4.0), -π/4.0)] 
             elseif ego_meas.speed <= 30
                 command = [.8 max(min(δ, π/4.0), -π/4.0)] 
             else
                 command = [0 max(min(δ, π/4.0), -π/4.0)] 
+                counter = 200
             end
             # command = [0 max(min(δ, π/4.0), -π/4.0)]
             @replace(CMD, command)
