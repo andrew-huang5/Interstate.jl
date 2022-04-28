@@ -70,10 +70,8 @@ function controller(CMD::Channel,
     #variable for target lane
     target_velocity = 30
     target_lane = 2
-    local target_car = undef
-    local old_target = undef
-    counter = 1000
-    change_lanes = true
+    target_car = undef
+    counter = 100
 
     while true
         sleep(0.0)
@@ -86,18 +84,23 @@ function controller(CMD::Channel,
         smallest_angle_2 = 2π       
         smallest_angle_3 = 2π
 
-        largest_angle = -2π
+        largest_angle_1 = -2π
+        largest_angle_2 = -2π
+        largest_angle_3 = -2π
 
         closest_car_front_1 = undef
         closest_car_front_2 = undef
         closest_car_front_3 = undef
 
-        closest_car_behind = undef
+        closest_car_behind_1 = undef
+        closest_car_behind_2 = undef
+        closest_car_behind_3 = undef
 
         center_position = road.segments[1].center
         ego_distance = ego_meas.position - center_position
         ego_angle = atan(ego_distance[2], ego_distance[1])
-
+        
+        # finding closest cars
         for (id, m) ∈ fleet_meas
             car_distance = m.position - center_position
 
@@ -120,10 +123,17 @@ function controller(CMD::Channel,
                 closest_car_front_3 = m
             end
 
-            if(difference < 0 && difference > largest_angle && m.target_lane == ego_meas.target_lane)
-                largest_angle = difference
-                closest_car_behind = m
-                # println("CAR FOUND")
+            if(difference < 0 && difference > largest_angle_1 && m.target_lane == 1)
+                largest_angle_1 = difference
+                closest_car_behind_1 = m
+            end
+            if(difference < 0 && difference > largest_angle_2 && m.target_lane == 2)
+                largest_angle_2 = difference
+                closest_car_behind_2 = m
+            end
+            if(difference < 0 && difference > largest_angle_3 && m.target_lane == 3)
+                largest_angle_3 = difference
+                closest_car_behind_3 = m
             end
         end
 
@@ -137,44 +147,9 @@ function controller(CMD::Channel,
             target_car = closest_car_front_3
         end
 
-        for (id, m) ∈ fleet_meas
-            car_distance = m.position - center_position
-            car_angle = atan(car_distance[2], car_distance[1])
-
-            if ego_meas.target_lane != m.target_lane && m.target_lane == target_lane
-                car_distance = m.position - center_position
-                car_angle = atan(car_distance[2], car_distance[1])
-
-                # println(car_angle)
-                # println(ego_angle)
-
-                difference = wrap(car_angle - ego_angle)
-
-                if difference < .1 && difference > -.1 # norm(ego_meas.position - m.position) < 20
-                    change_lanes = false
-                    println("DONT CHANGE LANES!")
-                    counter = 0
-                    println(m.target_lane)
-                    target_car = old_target
-                    target_lane = old_target.target_lane
-                end
-            elseif abs(ego_meas.target_lane - target_lane) == 2 && m.target_lane == 2
-                if difference < .1 && difference > -.1 # && norm(ego_meas.position - m.position) < 20
-                    change_lanes = false
-                    println("cant change 2")
-                    counter = 0
-                    println(m.target_lane)
-                    target_car = old_target
-                    target_lane = old_target.target_lane
-                end
-            end
-        end
-        
-
-        if counter == 1000
+        if counter == 100
             counter = 0
-            println("\nnew target car")
-            old_target = target_car
+            curr_lane = target_lane
             target_car = get_target_car(ego_meas, closest_car_front_1, closest_car_front_2, closest_car_front_3)
             
             if closest_car_front_1 == undef
@@ -187,31 +162,18 @@ function controller(CMD::Channel,
                 target_lane = target_car.target_lane
             end
 
-            # if closest_car_behind != undef
-            #     if norm(ego_meas.position - closest_car_behind.position) < 10 && closest_car_behind.speed > ego_meas.speed
-            #         # print("INCOMING")
-            #         if target_lane == 1 || target_lane == 2
-            #             target_lane = target_lane + 1
-            #         else
-            #             target_lane = 1
-            #         end
-            #     end
-            # end
-
-
-
             if target_car == undef
-                target_velocity = 50
+                target_velocity = 60
             else
                 target_velocity = target_car.speed
             end
 
-            if !change_lanes
-                change_lanes = true
-                target_lane = old_target.target_lane
-                target_car = old_target
+            temp = lane_change(ego_meas, closest_car_front_1, closest_car_front_2, closest_car_front_3, closest_car_behind_1, closest_car_behind_2, closest_car_behind_3, curr_lane, road.lanewidth, road.segments[1].radius, center_position)
+            if temp == 0
+                print("stay")
+                target_lane = curr_lane
             end
-            
+
             seg = road.segments[1]
             cte, ctv = get_crosstrack_error(ego_meas.position, ego_meas.heading, ego_meas.speed, target_lane, seg, road.lanes, road.lanewidth)
             δ = -K₁*cte-K₂*ctv
@@ -219,7 +181,7 @@ function controller(CMD::Channel,
                 # println("SLOWING DOWN")
                 command = [(target_velocity - ego_meas.speed), max(min(δ, π/4.0), -π/4.0)]
             else
-                ego_meas.speed <= 25 ? command = [.8 max(min(δ, π/4.0), -π/4.0)]  : command = [0 max(min(δ, π/4.0), -π/4.0)]  
+                ego_meas.speed <= 35 ? command = [.8 max(min(δ, π/4.0), -π/4.0)]  : command = [0 max(min(δ, π/4.0), -π/4.0)]  
             end
             # command = [0 max(min(δ, π/4.0), -π/4.0)]
             @replace(CMD, command)
@@ -231,7 +193,7 @@ function controller(CMD::Channel,
                 # println("SLOWING DOWN")
                 command = [(target_velocity - ego_meas.speed), max(min(δ, π/4.0), -π/4.0)]
             else
-                ego_meas.speed <= 25 ? command = [.8 max(min(δ, π/4.0), -π/4.0)]  : command = [0 max(min(δ, π/4.0), -π/4.0)]  
+                ego_meas.speed <= 35 ? command = [.8 max(min(δ, π/4.0), -π/4.0)]  : command = [0 max(min(δ, π/4.0), -π/4.0)]  
             end
             # command = [0 max(min(δ, π/4.0), -π/4.0)]
             @replace(CMD, command)
@@ -241,33 +203,7 @@ function controller(CMD::Channel,
 
 end
 
-
-# how to stay in one lane
-# what is in ego_meas?
-# using get_crosstrack_error
-
 function get_target_car(ego, car1, car2, car3)
-    # if car1 != undef
-    #     distance1 = norm(ego.position - car1.position)
-    # else
-    #     distance1 = 100000000000
-    #     print("HIIII")
-    # end
-
-    # if car2 != undef
-    #     distance2 = norm(ego.position - car2.position)
-    # else
-    #     distance2 = 100000000000
-    #     print("HIIII")
-    # end
-    
-    # if car3 != undef
-    #     distance3 = norm(ego.position - car3.position)
-    # else
-    #     distance3 = 100000000000
-    #     print("HIIII")
-    # end
-
     if car1 == undef
         # print("car1")
         return undef
@@ -295,3 +231,80 @@ function get_target_car(ego, car1, car2, car3)
         return car3
     end
 end
+
+function lane_change(ego, car1, car2, car3, car4, car5, car6, lane, width, radius, center)
+    ego_distance = ego.position - center
+    ego_angle = atan(ego_distance[2],ego_distance[1])
+    if (lane == 1)
+        # calculate gap
+        car_distance = car2.position - center
+        car_angle = atan(car_distance[2], car_distance[1])
+        car_distance2 = car5.position - center
+        car_angle2 = atan(car_distance2[2], car_distance2[1])
+        difference = wrap(car_angle - car_angle2)
+        length = (radius+width)*difference
+
+        # calculate angle differences between cars
+        diff1 = wrap(car_angle - ego_angle)
+        diff2 = wrap(ego_angle - car_angle2)
+        
+        if diff1 < .1 || diff2 < .1 || length <= ego.front*2
+            print("no change 1 \n")
+            return 0
+        else
+            return 1
+        end
+    elseif (lane == 2)
+        # calculate gap
+        car_distance = car1.position - center
+        car_angle = atan(car_distance[2], car_distance[1])
+        car_distance2 = car4.position - center
+        car_angle2 = atan(car_distance2[2], car_distance2[1])
+        difference1 = wrap(car_angle - car_angle2)
+        length1 = (radius+width)*difference1
+        
+        car_distance3 = car3.position - center
+        car_angle3 = atan(car_distance3[2], car_distance3[1])
+        car_distance4 = car6.position - center
+        car_angle4 = atan(car_distance4[2], car_distance4[1])
+        difference2 = wrap(car_angle3 - car_angle4)
+        length2 = (radius+width)*difference2
+
+        # calculate angle differences between cars
+        diff1 = wrap(car_angle - ego_angle)
+        diff2 = wrap(ego_angle - car_angle2)
+        diff3 = wrap(car_angle3 - ego_angle)
+        diff4 = wrap(ego_angle - car_angle4)
+
+        if (diff1 < .1 || diff2 < .1 || length1 <= ego.front*2) && (diff3 < .1 || diff4 < .1 || length2 <= ego.front*2)
+            print("no change 2 \n")
+            return 0
+        else
+            return 1
+        end
+    elseif (lane == 3)
+        # calculate gap
+        car_distance = car3.position - center
+        car_angle = atan(car_distance[2], car_distance[1])
+        car_distance2 = car6.position - center
+        car_angle2 = atan(car_distance2[2], car_distance2[1])
+        difference = wrap(car_angle - car_angle2)
+        length = (radius+width)*difference
+
+        # calculate angle differences between cars
+        diff1 = wrap(car_angle - ego_angle)
+        diff2 = wrap(ego_angle - car_angle2)
+        
+        if diff1 < .1 || diff2 < .1 || length <= ego.front*2
+            print("no change 3 \n")
+            return 0
+        else
+            return 1
+        end
+    else
+        print("check \n")
+        return 1
+    end
+end
+
+
