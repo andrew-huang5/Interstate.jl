@@ -70,6 +70,10 @@ function controller(CMD::Channel,
     #variable for target lane
     target_velocity = 30
     target_lane = 2
+    local target_car = undef
+    local old_target = undef
+    counter = 1000
+    change_lanes = true
 
     while true
         sleep(0.0)
@@ -83,14 +87,12 @@ function controller(CMD::Channel,
         smallest_angle_3 = 2π
 
         largest_angle = -2π
+
         closest_car_front_1 = undef
         closest_car_front_2 = undef
         closest_car_front_3 = undef
 
-        local closest_car_behind
-        local target_car
-
-        change_lanes = true;
+        closest_car_behind = undef
 
         center_position = road.segments[1].center
         ego_distance = ego_meas.position - center_position
@@ -101,7 +103,7 @@ function controller(CMD::Channel,
 
             car_angle = atan(car_distance[2], car_distance[1])
 
-            difference = car_angle - ego_angle
+            difference = wrap(car_angle - ego_angle)
 
             if(difference > 0 && difference < smallest_angle_1 && m.target_lane == 1)
                 smallest_angle_1 = difference
@@ -118,91 +120,123 @@ function controller(CMD::Channel,
                 closest_car_front_3 = m
             end
 
-            if(difference < 0 && difference > largest_angle)
+            if(difference < 0 && difference > largest_angle && m.target_lane == ego_meas.target_lane)
                 largest_angle = difference
                 closest_car_behind = m
+                # println("CAR FOUND")
             end
         end
 
-        target_car = get_target_car(ego_meas, closest_car_front_1, closest_car_front_2, closest_car_front_3)
-        
-        if closest_car_front_1 == undef
-            target_lane = 1
-        elseif closest_car_front_2 == undef
-            target_lane = 2
-        elseif closest_car_front_3 == undef
-            target_lane = 3
-        else
-            target_lane = target_car.target_lane
+        if target_lane == 1 && closest_car_front_1 != target_car
+            target_car = closest_car_front_1
+        end
+        if target_lane == 2 && closest_car_front_2 != target_car
+            target_car = closest_car_front_2
+        end
+        if target_lane == 3 && closest_car_front_3 != target_car
+            target_car = closest_car_front_3
         end
 
-        if target_car == undef
-            target_velocity = 50
-        else
-            target_velocity = target_car.speed
-            for (id, m) ∈ fleet_meas
-                # car_distance = m.position - center_position
-                # car_angle = atan(car_distance[2], car_distance[1])
-    
-                # if(target_lane == m.target_lane && abs(m.target_lane - ego_meas.target_lane) == 1 && abs(ego_angle - car_angle) <= .07)
-                #     println("CAN'T CHANGE LANES YET")
-                #     change_lanes = false
-                # end
+        for (id, m) ∈ fleet_meas
+            car_distance = m.position - center_position
+            car_angle = atan(car_distance[2], car_distance[1])
 
-                if ego_meas.target_lane != target_lane && m.target_lane == target_lane && target_lane != 2
-                    car_distance = m.position - center_position
-                    car_angle = atan(car_distance[2], car_distance[1])
-                    
-                    # println(ego_angle)
-                    # println(car_angle)
+            if ego_meas.target_lane != m.target_lane && m.target_lane == target_lane
+                car_distance = m.position - center_position
+                car_angle = atan(car_distance[2], car_distance[1])
 
-                    if abs(ego_angle - car_angle) <= .1 && car_angle > ego_angle
-                        change_lanes = false
-                        println("CANT CHANGE LANES")
-                        println(m.target_lane)
-                        break
-                    end
+                # println(car_angle)
+                # println(ego_angle)
+
+                difference = wrap(car_angle - ego_angle)
+
+                if difference < .1 && difference > -.1 # norm(ego_meas.position - m.position) < 20
+                    change_lanes = false
+                    println("DONT CHANGE LANES!")
+                    counter = 0
+                    println(m.target_lane)
+                    target_car = old_target
+                    target_lane = old_target.target_lane
                 end
-
-                if abs(ego_meas.target_lane - target_lane) == 2
-                    car_distance = m.position - center_position
-                    car_angle = atan(car_distance[2], car_distance[1])
-                    
-                    # println(ego_angle)
-                    # println(car_angle)
-
-                    if abs(ego_angle - car_angle) <= .1 && car_angle > ego_angle
-                        change_lanes = false
-                        println("CANT CHANGE LANES")
-                        println(m.target_lane)
-                        break
-                    end
+            elseif abs(ego_meas.target_lane - target_lane) == 2 && m.target_lane == 2
+                if difference < .1 && difference > -.1 # && norm(ego_meas.position - m.position) < 20
+                    change_lanes = false
+                    println("cant change 2")
+                    counter = 0
+                    println(m.target_lane)
+                    target_car = old_target
+                    target_lane = old_target.target_lane
                 end
-
-
             end
         end
-
-        if !change_lanes
-            target_lane = ego_meas.target_lane
-        end
-
-        # println(target_lane)
-
-        # print(ego_meas.speed, ' ' , target_velocity,' ', '\n')
         
-        seg = road.segments[1]
-        cte, ctv = get_crosstrack_error(ego_meas.position, ego_meas.heading, ego_meas.speed, target_lane, seg, road.lanes, road.lanewidth)
-        δ = -K₁*cte-K₂*ctv
-        if(target_car != undef && norm(ego_meas.position - target_car.position) < 35)
-            # println("SLOWING DOWN")
-            command = [(target_velocity - ego_meas.speed), max(min(δ, π/4.0), -π/4.0)]
+
+        if counter == 1000
+            counter = 0
+            println("\nnew target car")
+            old_target = target_car
+            target_car = get_target_car(ego_meas, closest_car_front_1, closest_car_front_2, closest_car_front_3)
+            
+            if closest_car_front_1 == undef
+                target_lane = 1
+            elseif closest_car_front_2 == undef
+                target_lane = 2
+            elseif closest_car_front_3 == undef
+                target_lane = 3
+            else
+                target_lane = target_car.target_lane
+            end
+
+            # if closest_car_behind != undef
+            #     if norm(ego_meas.position - closest_car_behind.position) < 10 && closest_car_behind.speed > ego_meas.speed
+            #         # print("INCOMING")
+            #         if target_lane == 1 || target_lane == 2
+            #             target_lane = target_lane + 1
+            #         else
+            #             target_lane = 1
+            #         end
+            #     end
+            # end
+
+
+
+            if target_car == undef
+                target_velocity = 50
+            else
+                target_velocity = target_car.speed
+            end
+
+            if !change_lanes
+                change_lanes = true
+                target_lane = old_target.target_lane
+                target_car = old_target
+            end
+            
+            seg = road.segments[1]
+            cte, ctv = get_crosstrack_error(ego_meas.position, ego_meas.heading, ego_meas.speed, target_lane, seg, road.lanes, road.lanewidth)
+            δ = -K₁*cte-K₂*ctv
+            if(target_car != undef && norm(ego_meas.position - target_car.position) < 35)
+                # println("SLOWING DOWN")
+                command = [(target_velocity - ego_meas.speed), max(min(δ, π/4.0), -π/4.0)]
+            else
+                ego_meas.speed <= 25 ? command = [.8 max(min(δ, π/4.0), -π/4.0)]  : command = [0 max(min(δ, π/4.0), -π/4.0)]  
+            end
+            # command = [0 max(min(δ, π/4.0), -π/4.0)]
+            @replace(CMD, command)
         else
-            ego_meas.speed <= 25 ? command = [.8 max(min(δ, π/4.0), -π/4.0)]  : command = [0 max(min(δ, π/4.0), -π/4.0)]  
+            seg = road.segments[1]
+            cte, ctv = get_crosstrack_error(ego_meas.position, ego_meas.heading, ego_meas.speed, target_lane, seg, road.lanes, road.lanewidth)
+            δ = -K₁*cte-K₂*ctv
+            if(target_car != undef && norm(ego_meas.position - target_car.position) < 35)
+                # println("SLOWING DOWN")
+                command = [(target_velocity - ego_meas.speed), max(min(δ, π/4.0), -π/4.0)]
+            else
+                ego_meas.speed <= 25 ? command = [.8 max(min(δ, π/4.0), -π/4.0)]  : command = [0 max(min(δ, π/4.0), -π/4.0)]  
+            end
+            # command = [0 max(min(δ, π/4.0), -π/4.0)]
+            @replace(CMD, command)
         end
-        # command = [0 max(min(δ, π/4.0), -π/4.0)]
-        @replace(CMD, command)
-        
+        counter += 1
     end
 
 end
