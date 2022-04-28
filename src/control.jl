@@ -176,11 +176,6 @@ function controller(CMD::Channel,
 
                 difference = wrap(car_angle - ego_angle)
 
-<<<<<<< HEAD
-                length = ((m.target_lane * road.lanewidth) + road.segments[1].radius) * abs(difference)
-
-                if difference < .08 && difference > -.08 # && ego_meas.front < length
-=======
                 if difference < 0
                     length = ((m.target_lane * road.lanewidth) + road.segments[1].radius) * -1* difference
                 else
@@ -188,7 +183,6 @@ function controller(CMD::Channel,
                 end
 
                 if difference < .06 && difference > -.06 
->>>>>>> 7cb08cd6b6ef6d8e826f362c72a098f12a5615cb
                     counter = 0
                     if m.target_lane == 1
                         change_lane_1 = false
