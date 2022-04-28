@@ -205,11 +205,7 @@ function controller(CMD::Channel,
         car_distance = closest_car_behind_1.position - center_position
         car_angle = atan(car_distance[2], car_distance[1])
         difference = wrap(car_angle - ego_angle)
-<<<<<<< HEAD
-        if difference < 0 && closest_car_behind_1.speed - ego_meas.speed > 5
-=======
         if difference > -.06 && difference < .06 && closest_car_behind_1.speed > ego_meas.speed
->>>>>>> 7cb08cd6b6ef6d8e826f362c72a098f12a5615cb
             change_lane_1 = false
             counter = 0
         end
