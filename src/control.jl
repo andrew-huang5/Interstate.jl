@@ -68,7 +68,7 @@ function controller(CMD::Channel,
 
     #change target velocity
     #variable for target lane
-    target_velocity = 30
+    target_velocity = 60
     target_lane = 2
     local target_car = undef
     local old_target = undef
@@ -160,17 +160,15 @@ function controller(CMD::Channel,
         for (id, m) ∈ fleet_meas
             car_distance = m.position - center_position
             car_angle = atan(car_distance[2], car_distance[1])
-            # (m.front*2) <= length
-
-            if (target_lane != m.target_lane) #&& m.target_lane == target_lane
+            if (target_lane != m.target_lane)
                 car_distance = m.position - center_position
                 car_angle = atan(car_distance[2], car_distance[1])
 
                 difference = wrap(car_angle - ego_angle)
 
-                length = ((m.target_lane * road.lanewidth) + road.segments[1].radius)*difference
+                length = ((m.target_lane * road.lanewidth) + road.segments[1].radius) * difference
 
-                if difference < .06 && difference > -.06
+                if difference < .06 && difference > -.06 && length >= 2*ego_meas.front
                     counter = 0
                     if m.target_lane == 1
                         change_lane_1 = false
@@ -220,24 +218,24 @@ function controller(CMD::Channel,
         
         if target_lane == 1 && norm(ego_meas.position - closest_car_behind_1.position) < 35 && ego_meas.speed < closest_car_behind_1.speed
             counter = set_counter
-            println("INCOMING")
-            command = [(closest_car_behind_1.speed - ego_meas.speed) max(min(δ, π/4.0), -π/4.0)] 
+            println("INCOMING 1")
+            command = [1.5*(closest_car_behind_1.speed - ego_meas.speed) max(min(δ, π/4.0), -π/4.0)] 
             @replace(CMD, command)
         elseif target_lane == 2 && norm(ego_meas.position - closest_car_behind_2.position) < 35 && ego_meas.speed < closest_car_behind_2.speed
             counter = set_counter
-            println("INCOMING")
-            command = [(closest_car_behind_2.speed - ego_meas.speed) max(min(δ, π/4.0), -π/4.0)] 
+            println("INCOMING 2")
+            command = [1.5*(closest_car_behind_2.speed - ego_meas.speed) max(min(δ, π/4.0), -π/4.0)] 
             @replace(CMD, command)
         elseif target_lane == 3 && norm(ego_meas.position - closest_car_behind_3.position) < 35 && ego_meas.speed < closest_car_behind_3.speed
             counter = set_counter
-            println("INCOMING")
-            command = [(closest_car_behind_3.speed - ego_meas.speed) max(min(δ, π/4.0), -π/4.0)] 
+            println("INCOMING 3")
+            command = [1.5*(closest_car_behind_3.speed - ego_meas.speed) max(min(δ, π/4.0), -π/4.0)] 
             @replace(CMD, command)
         end
 
         if counter == set_counter
             counter = 0
-            println("\nnew target car")
+            #println("\nnew target car")
             old_target = target_car
             target_car = get_target_car(ego_meas, closest_car_front_1, closest_car_front_2, closest_car_front_3)
             
@@ -273,34 +271,13 @@ function controller(CMD::Channel,
             change_lane_1 = true
             change_lane_2 = true
             change_lane_3 = true
-    
-            
-
-            # if closest_car_behind != undef
-            #     if norm(ego_meas.position - closest_car_behind.position) < 10 && closest_car_behind.speed > ego_meas.speed
-            #         # print("INCOMING")
-            #         if target_lane == 1 || target_lane == 2
-            #             target_lane = target_lane + 1
-            #         else
-            #             target_lane = 1
-            #         end
-            #     end
-            # end
-
-
 
             if target_car == undef
-                target_velocity = 50
+                target_velocity = 60
             else
                 target_velocity = target_car.speed
             end
 
-            # if !change_lanes
-            #     change_lanes = true
-            #     target_lane = old_target.target_lane
-            #     target_car = old_target
-            # end
-            
             seg = road.segments[1]
             cte, ctv = get_crosstrack_error(ego_meas.position, ego_meas.heading, ego_meas.speed, target_lane, seg, road.lanes, road.lanewidth)
             δ = -K₁*cte-K₂*ctv
@@ -349,33 +326,7 @@ function controller(CMD::Channel,
 
 end
 
-
-# how to stay in one lane
-# what is in ego_meas?
-# using get_crosstrack_error
-
 function get_target_car(ego, car1, car2, car3)
-    # if car1 != undef
-    #     distance1 = norm(ego.position - car1.position)
-    # else
-    #     distance1 = 100000000000
-    #     print("HIIII")
-    # end
-
-    # if car2 != undef
-    #     distance2 = norm(ego.position - car2.position)
-    # else
-    #     distance2 = 100000000000
-    #     print("HIIII")
-    # end
-    
-    # if car3 != undef
-    #     distance3 = norm(ego.position - car3.position)
-    # else
-    #     distance3 = 100000000000
-    #     print("HIIII")
-    # end
-
     if car1 == undef
         # print("car1")
         return undef
